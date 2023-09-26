@@ -74,6 +74,8 @@ class Worker(QtCore.QObject):
 
     update_process_point = QtCore.pyqtSignal(object)
     build_contacts_signal = QtCore.pyqtSignal(object)
+    continue_previous_point = QtCore.pyqtSignal(object)
+    file_processed_signal = QtCore.pyqtSignal(object)
 
     def __init__(self):
         super().__init__()
@@ -83,11 +85,13 @@ class Worker(QtCore.QObject):
     def activateFunction(self):
         def incAndEmit():
             # self._i, self._stop = process_control(self._i)
-            self._i, self._stop, self.df_unfound = start_send_messages(self.profile_info, self._i)
+            self._i, self._stop, self.df_missed = start_send_messages(self.profile_info, self._i)
             self.update_process_point.emit(self)
-            if self._stop and len(self.df_unfound) != 0:
+            if self._stop and len(self.df_missed) != 0:
                 self.build_contacts_signal.emit(self)
-
+            if self._stop and len(self.df_missed) == 0: 
+                self.file_processed_signal.emit(self)
+                
             
         QtCore.QTimer.singleShot(100, incAndEmit)
 
@@ -164,8 +168,11 @@ class WindowMain(QWidget):
         #############################################################
         self.emit_signal_start_process.connect(self.worker.activateFunction)
         self.worker.update_process_point.connect(self.check_parameters_continue_process)
-        self.worker.build_contacts_signal.connect(self.build_list_contacts)
+        self.worker.build_contacts_signal.connect(self.build_list_contacts_end_file)
+        self.worker.file_processed_signal.connect(self.show_message_file_processed)
         
+        self.worker.continue_previous_point.connect(self.restart_continue_previous_point)
+
         #############################################################
         #                   SETTINGS INITIAL FLAGS                  #
         #############################################################
@@ -200,10 +207,27 @@ class WindowMain(QWidget):
     def ExecuteUpdateProfileInfo(self):
         self.profile_info['msg_template'] = self.templateMSG.toPlainText()
         self.profile_info['filepath'] = self.filepath.toPlainText()
-        save_check_point('check_points/profile_info.json', self.profile_info)
+        save_check_point('check_points/profile_info.json', self.profile_info)   
 
-    def ExecuteStart(self):        
+    def reasumepoint(self):
+        self.profile_info['last_row'] = self.row_number + 1
+        self.emit_signal_start_process.emit()
+
+    def restartpoint(self):
+        self.profile_info['last_row'] = 0
+        self.emit_signal_start_process.emit()
+
+    def launch_confirm_windows(self):
+        self.WindowsConfirm = WindowConfirm()
+        self.WindowsConfirm.keepgoingsignal.connect(self.reasumepoint)
+        self.WindowsConfirm.restartsignal.connect(self.restartpoint)
+        self.WindowsConfirm.show()
+
+    def ExecuteStart(self):
+        # self.wait_confirm = True
+        self.launch_navigator_flag = True
         if self.launch_navigator_flag:
+            wait_autentication()
             flag_block = True
             self.ExecuteUpdateProfileInfo()
             if self._stop and flag_block:                
@@ -213,7 +237,16 @@ class WindowMain(QWidget):
                 self.worker.profile_info = self.profile_info
                 # print("self.profile_info['msg_template']", self.profile_info['msg_template'])
                 # print("self.worker.profile_info", self.worker.profile_info, '\n')
-                self.emit_signal_start_process.emit()
+                previous_run_flag, self.row_number = search_check_points(self.profile_info['filepath'])
+                print("previous_run_flag ", previous_run_flag)
+                if previous_run_flag:
+                    # QMessageBox.about(self, "Aviso", 'El archivo seleccionado se trabajo desea continuar en el mismo punto')
+                    self.launch_confirm_windows()
+                    # while self.wait_confirm:
+                    #     time.sleep(0.1)
+                else:
+                    self.emit_signal_start_process.emit()
+                    self.profile_info['last_row'] = 0
                 flag_block = False
 
             if not self._stop and flag_block:                
@@ -221,6 +254,8 @@ class WindowMain(QWidget):
                 self._stop = True
         else:
             QMessageBox.about(self, "Error", 'Debes ejecutar primero "WhatsApp"')
+
+
 
     def check_parameters_continue_process(self):
         if self.worker._stop:
@@ -232,10 +267,17 @@ class WindowMain(QWidget):
         else:
             self.emit_signal_start_process.emit()
 
-    def build_list_contacts(self):
-        create_csv_contacts('processed_file_unfound.csv', 'check_points/csv_contacts_info.csv')
+    def build_list_contacts_end_file(self):
+        create_csv_contacts(self.profile_info['filepath'].replace('.xlsx','_faltantes.csv'), 'check_points/csv_contacts_info.csv')
         create_vcf_file('check_points/csv_contacts_info.csv', file_out = 'contacts_file')
         QMessageBox.about(self, "Contactos faltantes creados", 'nueva lista creada con el nombre "contacts_file.vcf" ')
+    
+    def show_message_file_processed(self):
+        QMessageBox.about(self, "Archivo Procesado", 'Se finalizó el procesamiento del archivo')
+
+    def restart_continue_previous_point():
+        print("Open windows to restar a previus point")
+        QMessageBox.about(self, "Check point encontrad", 'nueva lista creada con el nombre "contacts_file.vcf" ')
 
     def ExecuteStop(self):        
         self._stop = True
@@ -263,6 +305,37 @@ class WindowMain(QWidget):
     # def ExecuteUploadFile(self):
     #     Worker.selected_file = self.selected_file
     #     self.FileName.setText(self.selected_file.split('/')[-1])
+class WindowConfirm(QWidget):
+    keepgoingsignal = pyqtSignal()
+    restartsignal = pyqtSignal()
+    def __init__(self):
+        super().__init__()      
+        self.setWindowTitle("Se encontro un check point")
+        self.setGeometry(150, 150, 260, 180)
+
+        self.ButtonContinue = QtWidgets.QPushButton('Continuar')
+        self.ButtonContinue.setFixedSize(120, 20)
+        self.ButtonContinue.clicked.connect(self.keepgoing)
+
+        self.ButtonRestart = QtWidgets.QPushButton('Reiniciar')
+        self.ButtonRestart.setFixedSize(120, 20)
+        self.ButtonRestart.clicked.connect(self.Restart)
+
+        self.Mainlayout = QHBoxLayout()
+        self.Mainlayout.addWidget(self.ButtonContinue)
+        self.Mainlayout.addWidget(self.ButtonRestart)        
+
+        self.setLayout(self.Mainlayout) 
+
+    def keepgoing(self):        
+        print("Continuar")
+        time.sleep(0.2)
+        self.close() 
+        self.keepgoingsignal.emit()
+    def Restart(self):
+        print("Reiniciar")
+        self.restartsignal.emit()
+        self.close() 
 
 def SetInicio(self):
     #               LAYERS SETTING                      

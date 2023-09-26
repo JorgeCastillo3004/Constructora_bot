@@ -115,8 +115,11 @@ def click_conversation(registername):
     result_contacts = driver.find_elements(By.CLASS_NAME, '_199zF._3j691')    
     if len(result_contacts)!= 0:
         for conversations in result_contacts:
-            contact_title = conversations.text.split('\n')[0]            
-            if registername in contact_title:            
+            contact_title = conversations.text.split('\n')[0]
+            # contact_title = conversations.find_element()
+            print("contact_title ", contact_title, "registername ", registername)
+
+            if registername in contact_title:
                 conversations.click()
                 print("Click")
                 break
@@ -126,7 +129,7 @@ def click_conversation(registername):
         contact_found =  False
     return contact_found
 
-def get_resulted_contact(registername, max_try = 4):
+def get_resulted_contact(registername, max_try = 2):
     flag_search = True
     count = 0
     id_conversation = 0
@@ -166,7 +169,7 @@ def send_msg(template, flag_sent = False):
 
 def check_unfound_contacts(filename, filenameout):
 	df = pd.read_csv(filename)	
-	df_unfound = df[df['dontsent']==True]
+	df_unfound = df[df['dontsent']==False]
 	df_unfound.to_csv(filenameout)
 	return df_unfound
 # if __name__ == "__main__":
@@ -183,9 +186,9 @@ def check_unfound_contacts(filename, filenameout):
 # 	    complete_phone ='+58'+row['Teléfono'].replace(' ','')	    
 # 	    print("Checking the contact: ", complete_phone)    
 	    
-# 	    make_search(complete_phone)
+# 	    make_search(row['Asesor'])
 # 	    time.sleep(1)
-# 	    flag_continue = get_resulted_contact()	    
+# 	    flag_continue = get_resulted_contact(row['Asesor'])	    
 	    
 # 	    if flag_continue:
 # 	        msg = build_msg(row)
@@ -195,24 +198,30 @@ def check_unfound_contacts(filename, filenameout):
 # 	driver.close()
 
 def start_send_messages(dict_profile, _i):
-	global df, complete_phone, flag_continue, row, template, df_unfound, check_point_row, dict_check_point
+	global df, complete_phone, flag_continue, row, template, df_missed, check_point_row, dict_check_point, current_file_name
 	_stop = False
 	nsteps = 5
 	
 
 	if _i == 0:
 		# print("Steep 0")
+		wait_autentication()
 		dict_check_point = load_check_point('check_points/last_row.json')
-		df = pd.read_excel(dict_profile['filepath'])# load file with the information related to contacts and plans.		
-		df = df[0:3]
-		df['dontsent'] = False
+		df = pd.read_excel(dict_profile['filepath'])# load file with the information related to contacts and plans.				
+		df['dontsent'] = True
 		df['Vencimiento_formated'] = df['Vencimiento'].dt.strftime('%d/%m/%Y')
 		template = dict_profile['msg_template']
-		df_unfound = pd.DataFrame()
-		previous_run_flag, check_point_row = search_check_points(dict_profile['filepath'], check_point_filename = 'check_points/last_row.json')
+		df_missed = pd.DataFrame()
+		check_point_row = dict_profile['last_row']
+		print("check_point_row inside start_send_messages step 0: ", check_point_row)
+		current_file_name = dict_profile['filepath'].split('/')[-1]
+		# previous_run_flag, check_point_row = search_check_points(dict_profile['filepath'], check_point_filename = 'check_points/last_row.json')
 	# Loop over data frame.
 	# for i, row in df[0:5].iterrows():
+
 	current_row = (_i-1)//nsteps + check_point_row
+	if current_row +1 >= len(df):
+		_stop = True
 
 	if (_i-1)%nsteps == 0:
 		# print("Steep 1")
@@ -233,25 +242,28 @@ def start_send_messages(dict_profile, _i):
 		flag_continue = get_resulted_contact(row['Asesor'])
 
 	if (_i-1)%nsteps == 3:
-		# print("Steep 4")		
+		print("Steep 4, last step")
 		if flag_continue:
 			msg = build_msg(row, template)
 			send_msg(msg, flag_sent = False)
 			time.sleep(2)
-			df.loc[current_row,'dontsent']= True
+			df.loc[current_row,'dontsent']= False
+			df_missed = df[df['dontsent']==False]
+			new_file_name = dict_profile['filepath'].replace('.xlsx','_faltantes.csv')
+			print("new_name ", new_file_name)
+			df_missed.to_csv(new_file_name)# save new file with only missed contacts
 		# print("current_row", current_row, "Len df",len(df))
-		if current_row +1 == len(df):
+		if current_row +1 >= len(df):
 			print("Documento Procesado")
 			cancel_search = driver.find_element(By.CLASS_NAME,'-Jnba')    
 			cancel_search.click()
-			current_file_name = dict_profile['filepath'].split('/')[-1]
-			df.to_csv('check_points/processed_file.csv')
+			
 			# filter rows that contact don't exist
-			df_unfound = check_unfound_contacts('check_points/processed_file.csv', 'processed_file_unfound.csv')
+			# df_unfound = check_unfound_contacts(dict_profile['filepath'].replace('.csv','_faltantes.csv'), 'processed_file_unfound.csv')
 			# save check point for this file			
 			dict_check_point[current_file_name] = {'last_row':current_row}
 			save_check_point('check_points/last_row.json', dict_check_point)
 			_stop = True
 			_i = -1
-	
-	return _i +1, _stop, df_unfound
+	df_missed = df[df['dontsent']==False]
+	return _i +1, _stop, df_missed#, previous_run_flag
