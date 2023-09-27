@@ -245,7 +245,7 @@ def start_send_messages(dict_profile, _i):
 		print("Steep 4, last step")
 		if flag_continue:
 			msg = build_msg(row, template)
-			send_msg(msg, flag_sent = False)
+			send_msg(msg, flag_sent = True)
 			time.sleep(2)
 			df.loc[current_row,'dontsent']= False
 			df_missed = df[df['dontsent']==False]
