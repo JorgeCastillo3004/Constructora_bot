@@ -49,10 +49,9 @@ def search_check_points(csv_filepath, check_point_filename = 'check_points/last_
 			row_number = 0
 	return previous_run_flag, row_number
 
-
 def create_profile_dict(filename = 'check_points/profile_info.json'):
 	folder_name = filename.split('/')[0]
-	if not os.path.exist(folder_name):
+	if not os.path.isdir(folder_name):
 		os.mkdir(folder_name)
 
 	if not os.path.isfile(filename):
@@ -94,69 +93,56 @@ def wait_autentication():
             time.sleep(1.5)
             print("-",end='')
 
-def get_search_box():
-	"""Function to get the search box of the contacs, get the box to send the contact name or phone number"""
-	search_box_complete =  driver.find_element(By.CLASS_NAME, '_1EUay')
-	search_box =  search_box_complete.find_element(By.CSS_SELECTOR, 'p')
-	return search_box
-
 def make_search(complete_phone):
-	
-	search_box = get_search_box()
+	element_locator = (By.XPATH, '//div[@title="Cuadro de texto para ingresar la búsqueda"]')
+	element = wait.until(EC.element_to_be_clickable(element_locator))
 
-	if search_box.text != '':
-		"""Clean search box in case of previos unconcluded search """
-		cancel_search = driver.find_element(By.CLASS_NAME,'-Jnba')    
-		cancel_search.click()
-	search_box = get_search_box()
-	search_box.send_keys(complete_phone)
+	if len(element.text):
+	    cancel_search = driver.find_element(By.CLASS_NAME,'-Jnba')    
+	    cancel_search.click()        
+	element.send_keys(complete_phone)	
+
+def wait_results():
+    loading = True
+    while loading:
+        try:
+            cancel_search = driver.find_element(By.CLASS_NAME,'-Jnba')# wait until appear cancel search
+            loading = False
+            time.sleep(0.2)
+        except:            
+            time.sleep(0.3)
 
 def click_conversation(registername):
-    result_contacts = driver.find_elements(By.CLASS_NAME, '_199zF._3j691')    
-    if len(result_contacts)!= 0:
-        for conversations in result_contacts:
-            contact_title = conversations.text.split('\n')[0]
-            # contact_title = conversations.find_element()
-            print("contact_title ", contact_title, "registername ", registername)
-
-            if registername in contact_title:
-                conversations.click()
-                print("Click")
-                break
-        contact_found =  True
-    else:
-        print("Contact unfound ")
-        contact_found =  False
-    return contact_found
-
-def get_resulted_contact(registername, max_try = 2):
-    flag_search = True
-    count = 0
-    id_conversation = 0
-    while flag_search:
+    xpath_contac_name= '//span[@title="{}"]'.format(registername)
+    flag_contact = True
+    while flag_contact:
         try:
-            contact_found = click_conversation(registername)
-            time.sleep(0.5)
-            flag_search = False
-        except:
-            count +=1
-            time.sleep(1.2)
-            if count == max_try:
-                flag_search = False
+            contactnames = driver.find_elements(By.XPATH, xpath_contac_name)            
+            if len(contactnames)!= 0:
+                contactnames[0].click()
+                flag_contact = False
+                contact_found = True
+            else:
+                print("Unfound")
+                flag_contact = False
                 contact_found = False
+        except:
+            time.sleep(0.3)            
     return contact_found
 
 def delete_previous_text(box_text):
     box_text.send_keys(Keys.BACKSPACE*len(box_text.text))
         
 def build_msg(row, template):
-	remaining_days = (datetime.now() - row['Vencimiento']).days	
+	remaining_days = (row['Vencimiento'].date() - datetime.now().date()).days
 
 	msg = template.format(row['Asesor'].title(), row['Plan'], row['Vencimiento_formated'], remaining_days)
 	return ' '.join(msg.replace('\n','').split())
 
 def send_msg(template, flag_sent = False):
-    msg_box = driver.find_element(By.CLASS_NAME, '_2lryq')# find block to send msg
+    # msg_box = driver.find_element(By.CLASS_NAME, '_2lryq')# find block to send msg
+    msg_box = wait.until(EC.visibility_of_element_located((By.CLASS_NAME, '_2lryq') ) )
+
     box_text = msg_box.find_element(By.CLASS_NAME, 'selectable-text.copyable-text.iq0m558w.g0rxnol2') # find msg box to load text
 
     delete_previous_text(box_text)
@@ -164,14 +150,102 @@ def send_msg(template, flag_sent = False):
     button_send = msg_box.find_element(By.CLASS_NAME, '_2xy_p._3XKXx') # find button send msg
     if flag_sent:
         button_send.click() # click to send msg
-    time.sleep(1)
+    # time.sleep(3)
     webdriver.ActionChains(driver).send_keys(Keys.ESCAPE).perform()   
 
 def check_unfound_contacts(filename, filenameout):
 	df = pd.read_csv(filename)	
-	df_unfound = df[df['dontsent']==False]
+	df_unfound = df[df['sent']==False]
 	df_unfound.to_csv(filenameout)
 	return df_unfound
+
+def read_file(filename):
+	try:
+		df = pd.read_excel(filename)# load file with the information related to contacts and plans.				
+	except:
+		df = pd.read_csv(filename)
+	return df
+
+def start_send_messages(dict_profile, _i):
+	global df, complete_phone, flag_continue, row, template, df_missed, check_point_row, dict_check_point, current_file_name
+	global wait
+	wait = WebDriverWait(driver, 10)
+	_stop = False
+	nsteps = 4	
+
+	if _i == 0:
+		# print("Initial Steep ")
+		wait_autentication()
+		dict_check_point = load_check_point('check_points/last_row.json')
+		df = read_file(dict_profile['filepath'])		
+		# Initial settings
+		df['sent'] = False
+		df['Vencimiento_formated'] = df['Vencimiento'].dt.strftime('%d/%m/%Y')
+		template = dict_profile['msg_template']
+		df_missed = pd.DataFrame()
+		check_point_row = dict_profile['last_row']		
+		current_file_name = dict_profile['filepath'].split('/')[-1]
+		flag_continue = False
+	
+	if _i == 0:
+		_i = 1	
+	
+	current_row = (_i-1)//nsteps + check_point_row
+
+	if current_row +1 > len(df):
+		_stop = True
+		_i = current_row*nsteps + 4
+		flag_continue = False
+
+	if (_i-1)%nsteps == 0:		
+		webdriver.ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+		row = df.iloc[current_row]
+		remaining_days = (row['Vencimiento'].date() - datetime.now().date()).days
+		if remaining_days > int(dict_profile['days_filter']):# Condition to pass next row
+			check_point_row += 1 # pass to the next row
+			_i = _i - 1
+			flag_continue = False
+			if current_row +1 == len(df):
+				_i = _i + 3
+
+				
+	if (_i-1)%nsteps == 1:	    
+		# print("Steep 2")
+		webdriver.ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+		make_search(row['Teléfono'])
+		wait_results()
+
+	if (_i-1)%nsteps == 2:
+		# print("Steep 3")
+		flag_continue = click_conversation(row['Asesor'])
+
+	if (_i-1)%nsteps == 3:		
+		# print("Steep 4")
+		if flag_continue:
+
+			msg = build_msg(row, template)
+			send_msg(msg, flag_sent = dict_profile['message_flag'])			
+			df.loc[current_row,'sent']= True # Confirmation message sent
+
+		df_missed = df[df['sent'] == False] # filter df don't send
+		new_file_name = dict_profile['filepath'].replace('.xlsx','_faltantes.xlsx')		
+		df_missed.to_excel(new_file_name)# save new file with only missed contacts
+			# save check point for this file			
+		dict_check_point[current_file_name] = {'last_row':current_row}
+		save_check_point('check_points/last_row.json', dict_check_point)		
+		print(current_row + 1, '/',len(df))
+		if current_row +1 == len(df):
+			print("--------- Documento Procesado ---------")
+			cancel_search = driver.find_element(By.CLASS_NAME,'-Jnba')    
+			cancel_search.click()			
+			# filter rows that contact don't exist
+			# df_unfound = check_unfound_contacts(dict_profile['filepath'].replace('.csv','_faltantes.csv'), 'processed_file_unfound.csv')			
+			_stop = True
+			_i = -1
+	df_missed = df[df['sent']==False]
+	return _i +1, _stop, df_missed#, previous_run_flag
+
+
 # if __name__ == "__main__":
 # 	dict_profile = load_check_point('check_points/profile_info.json')
 # 	launch_navigator(dict_profile)
@@ -196,74 +270,3 @@ def check_unfound_contacts(filename, filenameout):
 # 	        time.sleep(2)  
 # 	time.sleep(180)	
 # 	driver.close()
-
-def start_send_messages(dict_profile, _i):
-	global df, complete_phone, flag_continue, row, template, df_missed, check_point_row, dict_check_point, current_file_name
-	_stop = False
-	nsteps = 5
-	
-
-	if _i == 0:
-		# print("Steep 0")
-		wait_autentication()
-		dict_check_point = load_check_point('check_points/last_row.json')
-		df = pd.read_excel(dict_profile['filepath'])# load file with the information related to contacts and plans.				
-		df['dontsent'] = True
-		df['Vencimiento_formated'] = df['Vencimiento'].dt.strftime('%d/%m/%Y')
-		template = dict_profile['msg_template']
-		df_missed = pd.DataFrame()
-		check_point_row = dict_profile['last_row']
-		print("check_point_row inside start_send_messages step 0: ", check_point_row)
-		current_file_name = dict_profile['filepath'].split('/')[-1]
-		# previous_run_flag, check_point_row = search_check_points(dict_profile['filepath'], check_point_filename = 'check_points/last_row.json')
-	# Loop over data frame.
-	# for i, row in df[0:5].iterrows():
-
-	current_row = (_i-1)//nsteps + check_point_row
-	if current_row +1 >= len(df):
-		_stop = True
-
-	if (_i-1)%nsteps == 0:
-		# print("Steep 1")
-		row = df.iloc[current_row]
-		# complete_phone ='+58'+row['Teléfono'].replace(' ','')
-		
-		print("Fila actual", current_row+1,"/", len(df), "Nombre: ",row['Asesor'])
-		
-		# print("Checking the contact: ", complete_phone)
-
-	if (_i-1)%nsteps == 1:	    
-		# print("Steep 2")
-		make_search(row['Asesor'])
-		time.sleep(1)
-
-	if (_i-1)%nsteps == 2:
-		# print("Steep 3")
-		flag_continue = get_resulted_contact(row['Asesor'])
-
-	if (_i-1)%nsteps == 3:
-		print("Steep 4, last step")
-		if flag_continue:
-			msg = build_msg(row, template)
-			send_msg(msg, flag_sent = True)
-			time.sleep(2)
-			df.loc[current_row,'dontsent']= False
-			df_missed = df[df['dontsent']==False]
-			new_file_name = dict_profile['filepath'].replace('.xlsx','_faltantes.csv')
-			print("new_name ", new_file_name)
-			df_missed.to_csv(new_file_name)# save new file with only missed contacts
-		# print("current_row", current_row, "Len df",len(df))
-		if current_row +1 >= len(df):
-			print("Documento Procesado")
-			cancel_search = driver.find_element(By.CLASS_NAME,'-Jnba')    
-			cancel_search.click()
-			
-			# filter rows that contact don't exist
-			# df_unfound = check_unfound_contacts(dict_profile['filepath'].replace('.csv','_faltantes.csv'), 'processed_file_unfound.csv')
-			# save check point for this file			
-			dict_check_point[current_file_name] = {'last_row':current_row}
-			save_check_point('check_points/last_row.json', dict_check_point)
-			_stop = True
-			_i = -1
-	df_missed = df[df['dontsent']==False]
-	return _i +1, _stop, df_missed#, previous_run_flag

@@ -122,9 +122,20 @@ class WindowMain(QWidget):
         self.ButtonStop.setFixedSize(150, 25)        
         self.ButtonStop.clicked.connect(self.ExecuteStop)
 
-        self.ButtonSelectFile = QtWidgets.QPushButton('SelectFile')
-        self.ButtonSelectFile.setFixedSize(150, 25)        
+        self.OptionsDays = QComboBox(self)
+        # Populate the QComboBox with numbers from 1 to 10
+        for i in range(1, 16):
+            self.OptionsDays.addItem(str(i))
+        # Set the default selected item (optional)
+        self.OptionsDays.setCurrentIndex(4)
+
+        self.ButtonSelectFile = QtWidgets.QPushButton('Seleccionar Archivo')
+        self.ButtonSelectFile.setFixedSize(160, 25)        
         self.ButtonSelectFile.clicked.connect(self.ExecuteSelectFile)
+
+        self.ButtonEnableDisable = QtWidgets.QPushButton('Habilitado')
+        self.ButtonEnableDisable.setFixedSize(160, 25)        
+        self.ButtonEnableDisable.clicked.connect(self.ExecuteEnableDisable)
 
         self.filepath = QtWidgets.QTextEdit()
         self.filepath.setFixedSize(250, 75)
@@ -147,7 +158,7 @@ class WindowMain(QWidget):
         # Set profile info inside GUI
         self.filepath.setText(self.profile_info['filepath'])
         self.templateMSG.setText(self.profile_info['msg_template'])
-
+        self.profile_info['message_flag'] = True
         SetInicio(self)
         #############################################################
         #                   WORKER SETTINGS                         #
@@ -177,6 +188,7 @@ class WindowMain(QWidget):
         #                   SETTINGS INITIAL FLAGS                  #
         #############################################################
         self.launch_navigator_flag = False
+        self.check_point_loaded = False
         # self.file_selected = False        
         self._stop = True
 
@@ -190,7 +202,7 @@ class WindowMain(QWidget):
 
     def ExecuteLaunchWhatsApp(self):        
         try:
-            if not self.launch_navigator_flag:
+            # if not self.launch_navigator_flag:
                 if self.profile_info['filepath'] != '' and self.profile_info['msg_template']!='':
                     self.ExecuteUpdateProfileInfo()
                     print('Procediendo a abrir "WhatsApp Web"')
@@ -198,8 +210,8 @@ class WindowMain(QWidget):
                     self.launch_navigator_flag = True
                 else:
                     QMessageBox.about(self, "Error", 'Recuerda seleccionar el archivo de entrada y escribir el mensaje')
-            else:
-                QMessageBox.about(self, "Error", 'Previa session en curso')
+            # else:
+            #     QMessageBox.about(self, "Error", 'Previa session en curso')
         except:
             # self.driver.quit()
             QMessageBox.about(self, "Error", 'Recuerda cerrar todas las ventanas Chrome Navigator')
@@ -207,14 +219,21 @@ class WindowMain(QWidget):
     def ExecuteUpdateProfileInfo(self):
         self.profile_info['msg_template'] = self.templateMSG.toPlainText()
         self.profile_info['filepath'] = self.filepath.toPlainText()
+        self.profile_info['days_filter'] = self.OptionsDays.currentText()        
+        
         save_check_point('check_points/profile_info.json', self.profile_info)   
 
+    ################################ SECTION TO CONFIRM OR RESTART PROCESS #####################################
     def reasumepoint(self):
-        self.profile_info['last_row'] = self.row_number + 1
+        self.profile_info['last_row'] = self.row_number + 1        
+        self.worker.profile_info = self.profile_info
+        self.worker._i = 0
         self.emit_signal_start_process.emit()
 
     def restartpoint(self):
-        self.profile_info['last_row'] = 0
+        self.profile_info['last_row'] = 0        
+        self.worker.profile_info = self.profile_info
+        self.worker._i = 0
         self.emit_signal_start_process.emit()
 
     def launch_confirm_windows(self):
@@ -222,10 +241,9 @@ class WindowMain(QWidget):
         self.WindowsConfirm.keepgoingsignal.connect(self.reasumepoint)
         self.WindowsConfirm.restartsignal.connect(self.restartpoint)
         self.WindowsConfirm.show()
-
+    ##############################################################################################################
     def ExecuteStart(self):
-        # self.wait_confirm = True
-        self.launch_navigator_flag = True
+        self.close_navigator = False
         if self.launch_navigator_flag:
             wait_autentication()
             flag_block = True
@@ -233,20 +251,16 @@ class WindowMain(QWidget):
             if self._stop and flag_block:                
                 self.ButtonStartPause.setText("Pause") 
                 self.ButtonStop.setChecked(False)    
-                self._stop = False
-                self.worker.profile_info = self.profile_info
-                # print("self.profile_info['msg_template']", self.profile_info['msg_template'])
-                # print("self.worker.profile_info", self.worker.profile_info, '\n')
-                previous_run_flag, self.row_number = search_check_points(self.profile_info['filepath'])
-                print("previous_run_flag ", previous_run_flag)
-                if previous_run_flag:
-                    # QMessageBox.about(self, "Aviso", 'El archivo seleccionado se trabajo desea continuar en el mismo punto')
-                    self.launch_confirm_windows()
-                    # while self.wait_confirm:
-                    #     time.sleep(0.1)
+                self._stop = False                
+                if not self.check_point_loaded:
+                    previous_run_flag, self.row_number = search_check_points(self.profile_info['filepath'])                
+                    if previous_run_flag:                    
+                        self.launch_confirm_windows()
+                        self.check_point_loaded = True
                 else:
                     self.emit_signal_start_process.emit()
                     self.profile_info['last_row'] = 0
+                self.worker.profile_info = self.profile_info
                 flag_block = False
 
             if not self._stop and flag_block:                
@@ -255,11 +269,13 @@ class WindowMain(QWidget):
         else:
             QMessageBox.about(self, "Error", 'Debes ejecutar primero "WhatsApp"')
 
-
-
     def check_parameters_continue_process(self):
+        if self.worker._stop and self.close_navigator:            
+            self.launch_navigator_flag = False
+            driver.quit()
+
         if self.worker._stop:
-            self._stop = self.worker._stop            
+            self._stop = self.worker._stop
         if self._stop:
             # self._stop = _stop            
             self.ButtonStartPause.setText("Start")
@@ -268,12 +284,14 @@ class WindowMain(QWidget):
             self.emit_signal_start_process.emit()
 
     def build_list_contacts_end_file(self):
-        create_csv_contacts(self.profile_info['filepath'].replace('.xlsx','_faltantes.csv'), 'check_points/csv_contacts_info.csv')
+        create_csv_contacts(self.profile_info['filepath'].replace('.xlsx','_faltantes.xlsx'), 'check_points/csv_contacts_info.csv')
         create_vcf_file('check_points/csv_contacts_info.csv', file_out = 'contacts_file')
         QMessageBox.about(self, "Contactos faltantes creados", 'nueva lista creada con el nombre "contacts_file.vcf" ')
+        self.check_point_loaded = False
     
     def show_message_file_processed(self):
         QMessageBox.about(self, "Archivo Procesado", 'Se finalizó el procesamiento del archivo')
+        self.check_point_loaded = False
 
     def restart_continue_previous_point():
         print("Open windows to restar a previus point")
@@ -281,9 +299,19 @@ class WindowMain(QWidget):
 
     def ExecuteStop(self):        
         self._stop = True
-        Worker._stop = self._stop
-        self.driver.quit()
-        self.launch_navigator_flag = False
+        self._i = 0
+        self.worker._i = self._i
+        self.worker._stop = self._stop
+        self.close_navigator = True
+
+    def ExecuteEnableDisable(self):        
+
+        if self.profile_info['message_flag']:
+            self.profile_info['message_flag'] = False
+            self.ButtonEnableDisable.setText("Deshabilitado") 
+        else:
+            self.profile_info['message_flag'] = True
+            self.ButtonEnableDisable.setText("Habilitado")
 
     def ExecuteSelectFile(self):
         print("Excete seltect file: ")
@@ -294,10 +322,11 @@ class WindowMain(QWidget):
         selected_file, _ = file_dialog.getOpenFileName(self, "Open File", ".csv", "All files (*)")
         self.filepath.setText(selected_file)
         self.profile_info['filepath'] = selected_file
-        if self.profile_info['filepath']!='':
-            previous_run_flag, row_number = search_check_points(selected_file)
-            if previous_run_flag:
-                QMessageBox.about(self, "Aviso", 'Se encontro un check point desea continuar o reiniciar')
+        if self.profile_info['filepath']=='':
+            QMessageBox.about(self, "Error", 'No se seleccionó el archivo')
+        #     previous_run_flag, row_number = search_check_points(selected_file)
+            # if previous_run_flag:
+            #     QMessageBox.about(self, "Aviso", 'Se encontro un check point desea continuar o reiniciar')
         # if self.selected_file:
         #     self.updateFile.emit()
         #     self.file_selected = True
@@ -305,6 +334,7 @@ class WindowMain(QWidget):
     # def ExecuteUploadFile(self):
     #     Worker.selected_file = self.selected_file
     #     self.FileName.setText(self.selected_file.split('/')[-1])
+
 class WindowConfirm(QWidget):
     keepgoingsignal = pyqtSignal()
     restartsignal = pyqtSignal()
@@ -328,12 +358,10 @@ class WindowConfirm(QWidget):
         self.setLayout(self.Mainlayout) 
 
     def keepgoing(self):        
-        print("Continuar")
         time.sleep(0.2)
         self.close() 
         self.keepgoingsignal.emit()
-    def Restart(self):
-        print("Reiniciar")
+    def Restart(self):        
         self.restartsignal.emit()
         self.close() 
 
@@ -372,9 +400,11 @@ def SetInicio(self):
     self.SideButtonLeft.addWidget(self.ButtonLaunchWhatsApp)
     self.SideButtonLeft.addWidget(self.ButtonStartPause)
     self.SideButtonLeft.addWidget(self.ButtonStop)
+    self.SideButtonLeft.addWidget(self.OptionsDays)
 
     # ADD ELEMENTS TO THE SIDEBUTTONRIGHT LAYOUT
     self.SideButtonRight.addWidget(self.ButtonSelectFile)
+    self.SideButtonRight.addWidget(self.ButtonEnableDisable)
     self.SideButtonRight.addWidget(self.filepath)
     self.SideButtonRight.addWidget(self.msgTemplateLabel)
     self.SideButtonRight.addWidget(self.templateMSG)
@@ -403,4 +433,7 @@ if __name__ == "__main__":
     window.show()
     sys.exit(app.exec_())    
     closeConection(dbase)
-    driver.close()
+    try: 
+        driver.close()
+    except:
+        print('WhatsApp Close')

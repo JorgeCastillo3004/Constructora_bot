@@ -1,0 +1,4 @@
+pyqt5
+selenium
+chromedriver_autoinstaller
+pandas
