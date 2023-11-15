@@ -1,32 +1,47 @@
 # Constructora_bot
 
 
-Project Setup Guide
-Table of Contents
-Introduction
-Prerequisites
-Clone Repository
-Virtual Environment
-Introduction
-Welcome to the project! This guide will help you set up the necessary environment to run the application smoothly.
+# Project Setup Guide
 
-Prerequisites
-Before you begin, make sure you have the following installed:
+Welcome to the project repository! This guide will walk you through essential commands for navigating, setting up directories, and initializing the project.
 
-Git
-Python
-pip
-Clone Repository
-bash
-Copy code
+## Table of Contents
+1. [List Current Directory Contents](#list-current-directory-contents)
+2. [Change Directory to Downloads](#change-directory-to-downloads)
+3. [Create a New Directory](#create-a-new-directory)
+4. [Change Directory to "aplication"](#change-directory-to-aplicacion)
+5. [Clone Git Repository](#clone-git-repository)
+6. [Create a Virtual Environment](#create-a-virtual-environment)
+7. [Activate the Virtual Environment](#activate-the-virtual-environment)
+
+## 1. List Current Directory Contents
+Use the following command to list the contents of the current directory:
+```bash
+dir
+
+## 2. Change Directory to Downloads
+```bash
+cd Downloads
+
+## 3.Create a New Directory
+```bash
+mkdir aplication
+
+## 4. Change Directory to "aplication"
+```bash
+cd aplication
+
+## 5.Clone Git Repository
+```bash
 git clone https://github.com/JorgeCastillo3004/Constructora_bot.git
-This command clones the project repository to your local machine.
 
-Virtual Environment
-bash
-Copy code
-cd aplicacion
+## 7. Create a Virtual Environment
+```bash
 python -m venv env_chat
+
+## 8. Activate the Virtual Environment.
+```bash
 env_chat\Scripts\activate
-Navigate to the "aplicacion" directory, create a virtual environment named "env_chat," and activate it. This isolates project dependencies.
+
+
 
