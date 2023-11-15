@@ -13,6 +13,9 @@ Welcome to the project repository! This guide will walk you through essential co
 5. [Clone Git Repository](#clone-git-repository)
 6. [Create a Virtual Environment](#create-a-virtual-environment)
 7. [Activate the Virtual Environment](#activate-the-virtual-environment)
+8. [Install requirements](#install-requirements)
+9. [Execute main](#execute-main)
+10. [Generate an executable file.](generate-an-executable-file.)
 
 ## 1. List Current Directory Contents
 Use the following command to list the contents of the current directory:
@@ -34,13 +37,24 @@ cd aplication
 
 git clone https://github.com/JorgeCastillo3004/Constructora_bot.git
 
-## 7. Create a Virtual Environment
+## 6. Create a Virtual Environment
 
 python -m venv env_chat
 
-## 8. Activate the Virtual Environment.
+## 7. Activate the Virtual Environment.
 
 env_chat\Scripts\activate
+
+## 8. Install requirements
+
+pip install -r requirements.txt
+
+## 9. Execute main
+python main.py
+
+## 10. Generate an executable file.
+pip install pyinstaller
+pyinstaller --onefile main.py
 
 
 
