@@ -54,6 +54,7 @@ python main.py
 
 ## 10. Generate an executable file.
 pip install pyinstaller
+```bash
 pyinstaller --onefile main.py
 
 
