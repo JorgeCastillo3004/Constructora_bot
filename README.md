@@ -19,37 +19,39 @@ Welcome to the project repository! This guide will walk you through essential co
 
 ## 1. List Current Directory Contents
 Use the following command to list the contents of the current directory:
+```bash
 dir
 
 ## 2. Change Directory to Downloads
-
+```bash
 cd Downloads
 
 ## 3.Create a New Directory
-
+```bash
 mkdir aplication
 
 ## 4. Change Directory to "aplication"
-
+```bash
 cd aplication
 
 ## 5.Clone Git Repository
-
+```bash
 git clone https://github.com/JorgeCastillo3004/Constructora_bot.git
 
 ## 6. Create a Virtual Environment
-
+```bash
 python -m venv env_chat
 
 ## 7. Activate the Virtual Environment.
-
+```bash
 env_chat\Scripts\activate
 
 ## 8. Install requirements
-
+```bash
 pip install -r requirements.txt
 
 ## 9. Execute main
+```bash
 python main.py
 
 ## 10. Generate an executable file.
